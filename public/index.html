@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="MIN LAB，自用 Web 测试靶场。账号、内容、评论、文件，以及可切换修复模式的漏洞练习。">
+    <meta name="theme-color" content="#f8f9fb">
+    <title>MIN · 少一点，刚刚好</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/features.css">
+    <script src="/app.js" type="module"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到正文</a>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="/" aria-label="MIN 首页"><span class="brand-symbol">m<span>.</span></span><span class="brand-word">MIN<span class="brand-caption">自用测试靶场</span></span></a>
+        <nav id="nav" aria-label="主导航"></nav>
+        <div id="header-actions" class="header-actions"></div>
+      </div>
+    </header>
+    <main id="main" tabindex="-1"><div class="loading">正在加载…</div></main>
+    <footer class="site-footer"><div><a href="/" class="footer-word">MIN<span>.</span></a><span>动手测试，看见差异。</span></div><span class="footer-note">一个小而完整的自用靶场 <span class="version">v1.1</span></span></footer>
+    <div id="toast" class="toast" role="status" hidden></div>
+    <dialog id="delete-dialog" aria-labelledby="delete-title">
+      <form method="dialog"><span class="eyebrow">删除内容</span><h2 id="delete-title">确定删除这篇内容？</h2><p class="muted">删除后无法恢复。</p><p id="delete-error" class="form-error" role="alert" hidden></p><div class="dialog-actions"><button class="button secondary" value="cancel">取消</button><button type="button" class="button danger" id="confirm-delete">确认删除</button></div></form>
+    </dialog>
+    <noscript><p class="noscript">请开启 JavaScript 后使用本站。</p></noscript>
+  </body>
+</html>

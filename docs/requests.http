@@ -1,0 +1,103 @@
+@base = http://127.0.0.1:3000
+@email = practice@example.com
+@password = Practice-test-2026
+@cookie = COOKIE_VALUE
+
+### 注册（首次执行）；从 Set-Cookie 取 min.sid 的值填入 cookie
+POST {{base}}/api/auth/register
+Content-Type: application/json
+X-Requested-With: min-web-test
+
+{"name":"练习账号","email":"{{email}}","password":"{{password}}"}
+
+### 登录已有账号
+POST {{base}}/api/auth/login
+Content-Type: application/json
+X-Requested-With: min-web-test
+
+{"email":"{{email}}","password":"{{password}}"}
+
+### 当前账号
+GET {{base}}/api/session
+Cookie: min.sid={{cookie}}
+
+### 普通搜索：3 个已上架商品
+GET {{base}}/api/lab/search?mode=vulnerable&q=
+Cookie: min.sid={{cookie}}
+
+### SQL 注入：%' OR 1=1 -- 的 URL 编码
+GET {{base}}/api/lab/search?mode=vulnerable&q=%25%27%20OR%201%3D1%20--
+Cookie: min.sid={{cookie}}
+
+### 相同输入的修复模式
+GET {{base}}/api/lab/search?mode=fixed&q=%25%27%20OR%201%3D1%20--
+Cookie: min.sid={{cookie}}
+
+### 切换练习身份为 Alice
+POST {{base}}/api/lab/actor
+Content-Type: application/json
+X-Requested-With: min-web-test
+Cookie: min.sid={{cookie}}
+
+{"actor":"alice"}
+
+### 越权读取 Bob 的笔记：漏洞模式 200
+GET {{base}}/api/lab/notes/1002?mode=vulnerable
+Cookie: min.sid={{cookie}}
+
+### 同一编号：修复模式 403
+GET {{base}}/api/lab/notes/1002?mode=fixed
+Cookie: min.sid={{cookie}}
+
+### 保存 XSS 留言
+POST {{base}}/api/lab/messages
+Content-Type: application/json
+X-Requested-With: min-web-test
+Cookie: min.sid={{cookie}}
+
+{"body":"<script>document.body.append('XSS 已执行')</script>"}
+
+### HTML 预览（可在网页的 iframe 中观察执行）
+GET {{base}}/api/lab/messages/preview?mode=vulnerable
+Cookie: min.sid={{cookie}}
+
+### HTML 转义对照
+GET {{base}}/api/lab/messages/preview?mode=fixed
+Cookie: min.sid={{cookie}}
+
+### 普通评论：应作为纯文本显示
+POST {{base}}/api/articles/welcome/comments
+Content-Type: application/json
+X-Requested-With: min-web-test
+Cookie: min.sid={{cookie}}
+
+{"body":"<b>评论输入测试</b>"}
+
+### 上传一个文本文件
+POST {{base}}/api/files
+Content-Type: multipart/form-data; boundary=MINLabBoundary
+X-Requested-With: min-web-test
+Cookie: min.sid={{cookie}}
+
+--MINLabBoundary
+Content-Disposition: form-data; name="file"; filename="practice.txt"
+Content-Type: text/plain
+
+MIN LAB upload test
+--MINLabBoundary--
+
+### 文件列表（用返回的 id 访问 /api/files/FILE_ID/download）
+GET {{base}}/api/files
+Cookie: min.sid={{cookie}}
+
+### 练习请求记录
+GET {{base}}/api/lab/events
+Cookie: min.sid={{cookie}}
+
+### 重置共享练习数据（保留业务数据）
+POST {{base}}/api/lab/reset
+Content-Type: application/json
+X-Requested-With: min-web-test
+Cookie: min.sid={{cookie}}
+
+{"confirmation":"RESET"}

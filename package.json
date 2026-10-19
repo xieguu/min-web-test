@@ -1,0 +1,29 @@
+{
+  "name": "min-web-test",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "自用 Web 测试靶场：账号、内容、评论、文件与可切换的漏洞练习",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "node --watch server/index.js",
+    "start": "node server/index.js",
+    "test": "node --test tests/*.test.js",
+    "test:ui": "playwright test",
+    "check": "node --check server/app.js && node --check server/database.js && node --check server/features.js && node --check server/lab.js && node --check public/app.js && node --check public/features.js && node --check public/lab.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.2.1",
+    "express-session": "^1.18.2",
+    "helmet": "^8.1.0",
+    "multer": "^2.4.0",
+    "session-file-store": "^1.5.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0"
+  }
+}

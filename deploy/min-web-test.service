@@ -1,0 +1,26 @@
+[Unit]
+Description=MIN LAB personal web playground
+After=network.target
+
+[Service]
+Type=exec
+User=minweb
+Group=minweb
+WorkingDirectory=/opt/min-web-test/app
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3000
+Environment=APP_DATA_DIR=/var/lib/min-web-test
+ExecStart=/opt/min-web-test/runtime/bin/node /opt/min-web-test/app/server/index.js
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/min-web-test
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
