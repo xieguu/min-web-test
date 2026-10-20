@@ -13,6 +13,8 @@ import { mountFeatures } from './features.js';
 import { createLab } from './lab.js';
 import multer from 'multer';
 import { createAccess, mountAdmin, USER_COLUMNS, LEVELS } from './access.js';
+import isEmail from 'validator/lib/isEmail.js';
+import { createRegistration } from './registration.js';
 
 const FileStore = createFileStore(session);
 const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
@@ -22,7 +24,7 @@ const articleQuery = `SELECT a.*, COALESCE(u.name, 'MIN 编辑部') AS author_na
   FROM articles a LEFT JOIN users u ON a.author_id = u.id`;
 
 function fail(status, message) {
-  return Object.assign(new Error(message), { status });
+  return Object.assign(new Error(message), { status, expose: true });
 }
 function field(value, label, min, max) {
   if (typeof value !== 'string' || value.trim().length < min || value.trim().length > max) {
@@ -32,7 +34,7 @@ function field(value, label, min, max) {
 }
 function emailField(value) {
   const email = field(value, '邮箱', 3, 254).toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw fail(400, '请输入有效的邮箱地址');
+  if (!isEmail(email, { allow_utf8_local_part: false })) throw fail(400, '请输入有效的邮箱地址');
   return email;
 }
 function passwordField(value) {
@@ -49,7 +51,7 @@ function articleFields(data) {
   return { title, body, summary: summary || body.slice(0, 100), category: data.category };
 }
 
-export function createApp({ dataDir, sessionSecret, secureCookie = false } = {}) {
+export function createApp({ dataDir, sessionSecret, secureCookie = false, sendRegistrationCode, now = Date.now } = {}) {
   if (!dataDir) throw new Error('必须指定数据目录');
   const db = openDatabase(dataDir);
   const secretPath = join(dataDir, 'session-secret');
@@ -58,6 +60,7 @@ export function createApp({ dataDir, sessionSecret, secureCookie = false } = {})
     sessionSecret = readFileSync(secretPath, 'utf8').trim();
   }
   if (sessionSecret.length < 32) throw new Error('SESSION_SECRET 至少需要 32 个字符');
+  const registration = createRegistration({ db, secret: sessionSecret, sendCode: sendRegistrationCode, fail, now });
 
   const app = express();
   app.disable('x-powered-by');
@@ -102,16 +105,32 @@ export function createApp({ dataDir, sessionSecret, secureCookie = false } = {})
     return article;
   };
 
-  app.get('/api/session', (req, res) => res.json({ user: req.user || null, levels: LEVELS }));
+  app.get('/api/session', (req, res) => res.json({ user: req.user || null, levels: LEVELS, registration: registration.config }));
+  const mailLimit = rateLimit({
+    windowMs: 15 * 60000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false,
+    message: { error: '验证码发送请求过多，请在 15 分钟后重试' },
+  });
+  app.post('/api/auth/send-code', mailLimit, async (req, res) => {
+    const email = emailField(req.body?.email);
+    res.json(await registration.send(email));
+  });
   app.post('/api/auth/register', authLimit, async (req, res) => {
     const name = field(req.body?.name, '昵称', 2, 24);
     const email = emailField(req.body?.email);
     const password = passwordField(req.body?.password);
+    if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) throw fail(409, '这个邮箱已经注册，请直接登录');
+    const candidate = registration.check(email, req.body?.code);
     const hash = await bcrypt.hash(password, 12);
     const id = randomUUID();
-    const result = db.prepare('INSERT INTO users (id, name, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(email) DO NOTHING')
-      .run(id, name, email, hash, new Date().toISOString());
-    if (!result.changes) throw fail(409, '这个邮箱已经注册，请直接登录');
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      registration.consume(email, req.body.code, candidate.nonce);
+      const timestamp = new Date().toISOString();
+      const result = db.prepare('INSERT INTO users (id, name, email, password_hash, created_at, email_verified_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(email) DO NOTHING')
+        .run(id, name, email, hash, timestamp, timestamp);
+      if (!result.changes) throw fail(409, '这个邮箱已经注册，请直接登录');
+      db.exec('COMMIT');
+    } catch (error) { db.exec('ROLLBACK'); throw error; }
     await establishSession(req, id);
     res.status(201).json({ user: db.prepare(`SELECT ${userColumns} FROM users WHERE id = ?`).get(id) });
   });
@@ -190,10 +209,10 @@ export function createApp({ dataDir, sessionSecret, secureCookie = false } = {})
       return res.status(error.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ error: error.code === 'LIMIT_FILE_SIZE' ? '单个文件不能超过 2 MiB' : '每次只接受一个文件，字段名为 file' });
     }
     const status = error.status || 500;
-    if (status >= 500) console.error(error);
+    if (status >= 500 && !error.expose) console.error(error);
     const message = error.type === 'entity.parse.failed' ? '请求 JSON 格式不正确'
       : error.type === 'entity.too.large' ? '提交内容过大'
-      : status >= 500 ? '服务器发生错误，请稍后重试' : error.message;
+      : status >= 500 && !error.expose ? '服务器发生错误，请稍后重试' : error.message;
     res.status(status).json({ error: message });
   });
   return { app, db, close() { clearInterval(store.options.reapIntervalObject); lab.close(); db.close(); } };

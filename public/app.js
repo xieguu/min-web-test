@@ -3,8 +3,9 @@ import { renderLabPage } from './lab.js';
 import { levelBadge, accountPermissions, accessPage, renderAdminPage } from './admin.js';
 
 const main = document.querySelector('#main');
-const state = { user: null, levels: [], categories: ['入门指南', '使用说明', '更新记录', '随手记录'] };
-let routeVersion = 0, searchVersion = 0, searchTimer, toastTimer, deleteId;
+const state = { user: null, levels: [], registration: null, categories: ['入门指南', '使用说明', '更新记录', '随手记录'] };
+const codeCooldowns = new Map();
+let routeVersion = 0, searchVersion = 0, searchTimer, toastTimer, codeTimer, deleteId;
 const icons = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   arrow: '<path d="M5 12h14m-6-6 6 6-6 6"/>',
@@ -72,7 +73,7 @@ function sidebar() {
   return `<aside class="sidebar"><section class="side-card welcome"><span class="side-glyph">${icon('document')}</span>
     <h2>${state.user ? '留下一点新想法。' : '欢迎来到 MIN。'}</h2><p>${state.user ? '一段记录，一个灵感。<br>让值得留下的想法，有个地方。' : '一个简单、轻量的测试空间。<br>浏览内容，也可以留下你的想法。'}</p>
     <a class="button secondary" href="${state.user ? '/write' : '/register'}">${state.user ? '写一篇内容' : '创建你的账号'} ${icon('arrow')}</a></section>
-    <section class="side-card"><h2>自用测试靶场</h2><p>从账号、评论、文件开始，练习输入处理和权限测试。切换漏洞与修复模式，观察同一请求的差异。</p><a class="button secondary" href="/lab">进入自测靶场 ${icon('arrow')}</a><div class="mini-divider"></div><div class="about-line"><span>访问等级</span><span>LV2 测试员起</span></div><div class="about-line"><span>练习</span><span>SQLi / XSS / 越权</span></div><div class="about-line"><span>版本</span><span><i class="live-dot"></i>1.2.0</span></div></section>
+    <section class="side-card"><h2>自用测试靶场</h2><p>从账号、评论、文件开始，练习输入处理和权限测试。切换漏洞与修复模式，观察同一请求的差异。</p><a class="button secondary" href="/lab">进入自测靶场 ${icon('arrow')}</a><div class="mini-divider"></div><div class="about-line"><span>访问等级</span><span>LV2 测试员起</span></div><div class="about-line"><span>练习</span><span>SQLi / XSS / 越权</span></div><div class="about-line"><span>版本</span><span><i class="live-dot"></i>1.3.0</span></div></section>
     <div class="side-note">${icon('info')}<span>这里的内容公开可见。<br>登录后可以发布和管理自己的内容。</span></div></aside>`;
 }
 async function loadArticles() {
@@ -129,7 +130,45 @@ function authPage(register) {
     <label class="field"><span>邮箱</span><input type="email" name="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required></label>
     <div class="field"><label for="password">密码</label><div class="password-wrap"><input type="password" id="password" name="password" autocomplete="${register ? 'new-password' : 'current-password'}" minlength="8" maxlength="64" placeholder="${register ? '设置至少 8 位密码' : '输入你的密码'}" required><button type="button" class="password-toggle" data-action="toggle-password" aria-label="显示密码" aria-pressed="false">显示</button></div>${register ? '<small>8–64 个字符，最多 72 字节</small>' : ''}</div>
     <button type="submit" class="button full-width">${register ? '创建账号' : '登录'} ${icon('arrow')}</button><p class="form-footer">${register ? '已经有账号？' : '第一次来这里？'}<a href="${register ? '/login' : '/register'}${suffix}">${register ? '去登录' : '创建账号'}</a></p></form><p class="auth-note">少一点复杂，多一点专注。</p></div></div>`;
-  if (register) document.querySelector('#auth-form .form-intro').textContent = '注册后为 LV1 普通用户，更高等级由管理员授予。';
+  if (register) {
+    const form = document.querySelector('#auth-form');
+    form.querySelector('.form-intro').textContent = '验证邮箱后创建 LV1 普通用户账号。';
+    form.querySelector('.field:has(input[name="email"])').insertAdjacentHTML('afterend', `<div class="field"><label for="email-code">邮箱验证码</label><div class="email-code-row"><input name="code" id="email-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" placeholder="6 位数字" required><button id="send-email-code" class="button secondary" type="button">发送验证码</button></div><small id="email-code-hint">验证码 10 分钟有效，每 60 秒可重发一次。</small></div>`);
+    if (!state.registration.mailConfigured) {
+      form.querySelector('.form-intro').insertAdjacentHTML('afterend', '<p class="mail-config-note">站点尚未配置发信服务，暂时不能注册。请联系站点管理员配置 SMTP；已有账号可以正常登录。</p>');
+    }
+    const button = form.querySelector('#send-email-code'), emailInput = form.elements.email;
+    let sending = false;
+    const updateButton = () => {
+      clearTimeout(codeTimer);
+      if (!form.isConnected) return;
+      const email = emailInput.value.trim().toLowerCase();
+      const remaining = Math.max(0, Math.ceil(((codeCooldowns.get(email) || 0) - Date.now()) / 1000));
+      button.disabled = sending || remaining > 0 || !state.registration.mailConfigured;
+      button.textContent = sending ? '正在发送…' : remaining ? `${remaining}s 后重发` : '发送验证码';
+      if (remaining > 0) codeTimer = setTimeout(updateButton, 1000);
+    };
+    emailInput.addEventListener('input', () => { form.elements.code.value = ''; updateButton(); });
+    button.addEventListener('click', async () => {
+      emailInput.value = emailInput.value.trim();
+      if (!emailInput.reportValidity()) return;
+      const email = emailInput.value.toLowerCase();
+      const error = form.querySelector('.form-error');
+      error.hidden = true; sending = true; updateButton();
+      try {
+        const response = await api('/auth/send-code', { method: 'POST', body: { email } });
+        codeCooldowns.set(email, Date.now() + response.retryAfter * 1000);
+        if (!form.isConnected) return;
+        if (emailInput.value.trim().toLowerCase() === email) {
+          form.querySelector('#email-code-hint').textContent = `验证码已发往 ${email}，请在 10 分钟内填写。`;
+          form.elements.code.focus();
+        }
+        toast('验证码已发送，请查收邮箱');
+      } catch (problem) { if (form.isConnected) { error.textContent = problem.message; error.hidden = false; } }
+      finally { sending = false; updateButton(); }
+    });
+    updateButton();
+  }
 }
 async function articlePage(id, version) {
   const { article } = await api(`/articles/${encodeURIComponent(id)}`);
@@ -162,10 +201,12 @@ async function accountPage(version) {
   main.innerHTML = `<div class="page-header"><span class="eyebrow">YOUR LITTLE SPACE</span><h1>我的账号</h1><p>管理个人资料，找到你留下的每一篇内容。</p></div><div class="account-grid"><section class="form-card profile-card">${avatar(user.name, 'profile-avatar')}<h2>${escape(user.name)}</h2><p class="profile-email">${escape(user.email)}</p><div class="mini-divider"></div><form id="profile-form">${errorBox()}<label class="field"><span>昵称</span><input name="name" autocomplete="nickname" minlength="2" maxlength="24" value="${escape(user.name)}" required></label><label class="field"><span>邮箱</span><input type="email" value="${escape(user.email)}" disabled><small>邮箱作为登录账号，不支持修改。</small></label><button class="button secondary full-width" type="submit">保存资料</button></form><p class="account-created">加入于 ${date(user.created_at)}</p><button class="button ghost logout-button" data-action="logout">退出登录</button><p id="logout-error" class="form-error" role="alert" hidden></p></section><section class="account-content"><div class="content-toolbar"><h2 class="section-heading">我的内容 <span class="count">${articles.length}</span></h2><a href="/write" class="button small">${icon('plus')}发布内容</a></div>${articles.length ? articleCards(articles) : emptyState('还没有发布内容', '给这个小小的空间，留下你的第一篇记录。', '<a class="button secondary" href="/write">开始记录 →</a>')}</section></div>`;
   main.querySelector('.account-grid').insertAdjacentHTML('beforebegin', accountPermissions(user, state.levels, escape));
   main.querySelector('.profile-email').insertAdjacentHTML('afterend', levelBadge(user.level, state.levels, escape));
+  main.querySelector('.profile-email').insertAdjacentHTML('afterend', `<p class="email-verification-status">${user.email_verified_at ? '邮箱已验证' : '历史账号：注册时尚未启用邮箱验证'}</p>`);
 }
 async function renderRoute() {
   const version = ++routeVersion;
   clearTimeout(searchTimer);
+  clearTimeout(codeTimer);
   renderHeader();
   const path = location.pathname;
   const mine = new URLSearchParams(location.search).get('mine') === '1';
@@ -288,9 +329,10 @@ document.querySelector('#confirm-delete').addEventListener('click', async event 
 });
 window.addEventListener('popstate', renderRoute);
 try {
-  const { user, levels } = await api('/session');
+  const { user, levels, registration } = await api('/session');
   state.user = user;
   state.levels = levels;
+  state.registration = registration;
   await renderRoute();
 } catch (error) {
   renderHeader();

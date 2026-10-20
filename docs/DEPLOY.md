@@ -25,6 +25,39 @@ bash /opt/min-web-test/app/deploy/install.sh
 
 脚本从 Node.js 官方下载运行时并验证 SHA-256，按锁文件安装生产依赖，配置服务，最后检查 `/api/session`。现有服务器 Node.js 不受影响。
 
+## 配置注册验证码发信
+
+首次配置时，在服务器执行：
+
+```bash
+if [ ! -f /etc/min-web-test.env ]; then
+  install -m 600 /opt/min-web-test/app/.env.example /etc/min-web-test.env
+fi
+nano /etc/min-web-test.env
+```
+
+填写真实的 SMTP 参数并移除行首的 `#`：
+
+```dotenv
+SMTP_HOST=smtp.example.com
+SMTP_PORT=465
+SMTP_SECURE=1
+SMTP_USER=sender@example.com
+SMTP_PASS='YOUR_SMTP_AUTHORIZATION_CODE'
+SMTP_FROM=sender@example.com
+```
+
+发信主机、端口、SMTP 密码或授权码需要向自己的发信邮箱服务商获取。如果使用 587 的 STARTTLS，则使用 `SMTP_PORT=587` 和 `SMTP_SECURE=0`。
+
+检查连接与认证，再重启：
+
+```bash
+/opt/min-web-test/runtime/bin/node --env-file=/etc/min-web-test.env /opt/min-web-test/app/server/mail-check.js
+systemctl restart min-web-test
+```
+
+接着在注册页实际发送验证码，确认收件邮箱收到邮件。未配置发信时不能完成新注册，已有账号仍可登录；验证码不输出到网页或日志。SMTP 配置文件独立于代码仓库，后续更新保留该文件。
+
 ## 本机访问
 
 在 Windows 新开终端，保持下列命令运行：

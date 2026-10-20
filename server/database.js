@@ -64,7 +64,7 @@ export function openDatabase(dataDir) {
       db.close();
       throw error;
     }
-  } else if (version > 3) {
+  } else if (version > 4) {
     db.close();
     throw new Error(`不支持的数据库版本：${version}`);
   }
@@ -107,6 +107,29 @@ export function openDatabase(dataDir) {
         ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0 CHECK (disabled IN (0, 1));
         ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0;
         PRAGMA user_version = 3;
+        COMMIT;
+      `);
+    } catch (error) {
+      db.exec('ROLLBACK;');
+      db.close();
+      throw error;
+    }
+  }
+  if (version < 4) {
+    try {
+      db.exec(`
+        BEGIN;
+        ALTER TABLE users ADD COLUMN email_verified_at TEXT;
+        CREATE TABLE registration_codes (
+          email TEXT PRIMARY KEY COLLATE NOCASE,
+          nonce TEXT NOT NULL,
+          code_hash TEXT NOT NULL,
+          expires_at INTEGER NOT NULL,
+          resend_at INTEGER NOT NULL,
+          attempts INTEGER NOT NULL DEFAULT 0,
+          delivered INTEGER NOT NULL DEFAULT 0
+        );
+        PRAGMA user_version = 4;
         COMMIT;
       `);
     } catch (error) {

@@ -6,12 +6,14 @@ import { join, resolve, sep } from 'node:path';
 import { once } from 'node:events';
 import { DatabaseSync } from 'node:sqlite';
 import { createApp } from '../server/app.js';
+import { createTestMail } from './mail-fixture.js';
 
 test('评论、文件与隔离靶场', async t => {
   const root = resolve(tmpdir()), dataDir = mkdtempSync(join(root, 'min-web-features-'));
   let runtime, server, base;
+  const mail = createTestMail();
   const start = async () => {
-    runtime = createApp({ dataDir });
+    runtime = createApp({ dataDir, sendRegistrationCode: mail.sendRegistrationCode });
     server = runtime.app.listen(0, '127.0.0.1');
     await once(server, 'listening');
     base = `http://127.0.0.1:${server.address().port}`;
@@ -37,7 +39,10 @@ test('评论、文件与隔离靶场', async t => {
     };
   };
   const alice = client(), bob = client(), guest = client();
-  const register = (request, email) => request('/auth/register', { method: 'POST', body: { name: email.split('@')[0], email, password: 'Practice-test-2026' } });
+  const register = async (request, email) => {
+    await request('/auth/send-code', { method: 'POST', body: { email } });
+    return request('/auth/register', { method: 'POST', body: { name: email.split('@')[0], email, password: 'Practice-test-2026', code: mail.messages.get(email) } });
+  };
   const upload = (bytes, filename = '测试文件.txt') => { const data = new FormData(); data.append('file', new Blob([bytes]), filename); return data; };
   await register(alice, 'alice@example.com');
   await register(bob, 'bob@example.com');
@@ -148,7 +153,7 @@ test('评论、文件与隔离靶场', async t => {
   });
 });
 
-test('v1 数据库升级为 v3 时保留已有账号和文章，已有账号默认 LV1', () => {
+test('v1 数据库升级为 v4 时保留已有账号和文章，已有账号默认 LV1', () => {
   const root = resolve(tmpdir()), dataDir = mkdtempSync(join(root, 'min-web-migrate-'));
   const original = new DatabaseSync(join(dataDir, 'site.sqlite'));
   original.exec(`
@@ -161,7 +166,8 @@ test('v1 数据库升级为 v3 时保留已有账号和文章，已有账号默�
   original.close();
   const runtime = createApp({ dataDir });
   try {
-    assert.equal(runtime.db.prepare('PRAGMA user_version').get().user_version, 3);
+    assert.equal(runtime.db.prepare('PRAGMA user_version').get().user_version, 4);
+    assert.equal(runtime.db.prepare('SELECT email_verified_at FROM users').get().email_verified_at, null);
     assert.deepEqual({ ...runtime.db.prepare('SELECT level, disabled, session_version FROM users').get() }, { level: 1, disabled: 0, session_version: 0 });
     assert.equal(runtime.db.prepare('SELECT name FROM users').get().name, '原账号');
     assert.equal(runtime.db.prepare('SELECT body FROM articles').get().body, '原正文');

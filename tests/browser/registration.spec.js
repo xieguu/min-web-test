@@ -1,0 +1,30 @@
+import { test, expect } from '@playwright/test';
+import { fillRegistrationCode, testRegistrationCode } from './fixtures.js';
+
+test('邮箱验证码注册、重发倒计时、错误提示与验证状态', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  const email = `verified-${Date.now()}@example.com`;
+  await page.goto('/register');
+  await page.getByLabel('昵称', { exact: true }).fill('邮箱验证用户');
+  await page.getByLabel('邮箱', { exact: true }).fill(email);
+  await page.getByLabel('密码', { exact: true }).fill('Verify-browser-2026');
+  await fillRegistrationCode(page, email);
+  await expect(page.locator('#send-email-code')).toBeDisabled();
+  await expect(page.locator('#send-email-code')).toContainText('后重发');
+  const code = await testRegistrationCode(email);
+  await page.getByLabel('邮箱验证码', { exact: true }).fill(code === '000000' ? '000001' : '000000');
+  await page.getByRole('button', { name: '创建账号', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveText('验证码不正确');
+  await page.screenshot({ path: 'test-results/registration-code-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 320, height: 740 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth), { timeout: 3000 }).toBeLessThanOrEqual(320);
+  await page.screenshot({ path: 'test-results/registration-code-mobile.png', fullPage: true });
+  await page.getByLabel('邮箱验证码', { exact: true }).fill(code);
+  await page.getByRole('button', { name: '创建账号', exact: true }).click();
+  await expect(page.getByRole('link', { name: '我的内容', exact: true })).toBeVisible();
+  await page.goto('/account');
+  await expect(page.locator('.email-verification-status')).toHaveText('邮箱已验证');
+  await expect(page.locator('.level-card.current-level')).toContainText('LV1 普通用户');
+  expect(errors).toEqual([]);
+});

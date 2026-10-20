@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { setTestUserLevel } from './fixtures.js';
+import { setTestUserLevel, fillRegistrationCode } from './fixtures.js';
 
 test('评论、文件与三种漏洞的浏览器对照测试', async ({ page, playwright }) => {
   const errors = [];
@@ -8,6 +8,7 @@ test('评论、文件与三种漏洞的浏览器对照测试', async ({ page, pl
   await page.getByLabel('昵称', { exact: true }).fill('靶场测试');
   const email = `lab-${Date.now()}@example.com`;
   await page.getByLabel('邮箱', { exact: true }).fill(email);
+  await fillRegistrationCode(page, email);
   await page.getByLabel('密码', { exact: true }).fill('Practice-browser-2026');
   await page.getByRole('button', { name: '创建账号', exact: true }).click();
   await expect(page.getByRole('link', { name: '我的内容', exact: true })).toBeVisible();

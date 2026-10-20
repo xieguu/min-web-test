@@ -6,12 +6,14 @@ import { join, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createApp } from '../server/app.js';
 import { promoteAdmin } from '../server/admin.js';
+import { createTestMail } from './mail-fixture.js';
 
 test('账号等级、越级请求、管理员授权和禁用后的会话失效', async t => {
   const tempRoot = resolve(tmpdir()), dataDir = mkdtempSync(join(tempRoot, 'min-web-access-'));
   let runtime, server, base;
+  const mail = createTestMail();
   const start = async () => {
-    runtime = createApp({ dataDir });
+    runtime = createApp({ dataDir, sendRegistrationCode: mail.sendRegistrationCode });
     server = runtime.app.listen(0, '127.0.0.1');
     await once(server, 'listening');
     base = `http://127.0.0.1:${server.address().port}`;
@@ -36,7 +38,10 @@ test('账号等级、越级请求、管理员授权和禁用后的会话失效',
   };
   const guest = client(), owner = client(), member = client();
   const password = 'Access-test-2026';
-  const register = (request, email) => request('/auth/register', { method: 'POST', body: { name: email.split('@')[0], email, password, level: 3, disabled: false, role: 'admin' } });
+  const register = async (request, email) => {
+    await request('/auth/send-code', { method: 'POST', body: { email } });
+    return request('/auth/register', { method: 'POST', body: { name: email.split('@')[0], email, password, level: 3, disabled: false, role: 'admin', code: mail.messages.get(email) } });
+  };
   const login = (request, email) => request('/auth/login', { method: 'POST', body: { email, password } });
   const ownerResult = await register(owner, 'owner@example.com');
   const memberResult = await register(member, 'member@example.com');

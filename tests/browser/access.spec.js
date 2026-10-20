@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { testAdmin } from './fixtures.js';
+import { testAdmin, testRegistrationCode } from './fixtures.js';
 
 test('管理员界面升降级、禁用与普通账号权限展示', async ({ page, playwright }) => {
   const errors = [];
@@ -7,7 +7,8 @@ test('管理员界面升降级、禁用与普通账号权限展示', async ({ pa
   const email = `member-${Date.now()}@example.com`, password = 'Member-browser-2026';
   const member = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3107', extraHTTPHeaders: { 'X-Requested-With': 'min-web-test' } });
   try {
-    expect((await member.post('/api/auth/register', { data: { email, password, name: '待授权用户' } })).status()).toBe(201);
+    expect((await member.post('/api/auth/send-code', { data: { email } })).status()).toBe(200);
+    expect((await member.post('/api/auth/register', { data: { email, password, name: '待授权用户', code: await testRegistrationCode(email) } })).status()).toBe(201);
     expect((await member.get('/api/lab')).status()).toBe(403);
     await page.goto('/login');
     await page.getByLabel('邮箱', { exact: true }).fill(testAdmin.email);

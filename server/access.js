@@ -1,4 +1,4 @@
-export const USER_COLUMNS = 'id, name, email, created_at, level, disabled';
+export const USER_COLUMNS = 'id, name, email, created_at, level, disabled, email_verified_at';
 export const LEVELS = [
   { level: 1, name: '普通用户', description: '发布和管理自己的文章、发表评论。' },
   { level: 2, name: '测试员', description: '包含 LV1 权限，并可管理自己的文件和进入自测靶场。' },

@@ -5,13 +5,15 @@ import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { once } from 'node:events';
 import { createApp } from '../server/app.js';
+import { createTestMail } from './mail-fixture.js';
 
 test('账号、内容权限与持久化完整流程', async t => {
   const tempRoot = resolve(tmpdir());
   const dataDir = mkdtempSync(join(tempRoot, 'min-web-test-'));
   let runtime, server, base;
+  const mail = createTestMail();
   const start = async () => {
-    runtime = createApp({ dataDir });
+    runtime = createApp({ dataDir, sendRegistrationCode: mail.sendRegistrationCode });
     server = runtime.app.listen(0, '127.0.0.1');
     await once(server, 'listening');
     base = `http://127.0.0.1:${server.address().port}`;
@@ -60,11 +62,13 @@ test('账号、内容权限与持久化完整流程', async t => {
     assert.equal((await guest('/auth/register', { method: 'POST', body: { ...account, password: '密'.repeat(30) } })).status, 400);
   });
   await t.test('注册会话、重复邮箱与密码哈希', async () => {
-    const result = await alice('/auth/register', { method: 'POST', body: account });
+    assert.equal((await alice('/auth/send-code', { method: 'POST', body: { email: account.email } })).status, 200);
+    const result = await alice('/auth/register', { method: 'POST', body: { ...account, code: mail.messages.get(account.email) } });
     assert.equal(result.status, 201);
     assert.equal(result.data.user.email, account.email);
     assert.equal(result.data.user.level, 1);
     assert.equal(result.data.user.disabled, 0);
+    assert.ok(result.data.user.email_verified_at);
     assert.equal(result.data.user.password_hash, undefined);
     assert.match(result.headers.get('set-cookie'), /HttpOnly/);
     assert.match(result.headers.get('set-cookie'), /SameSite=Lax/);
@@ -88,7 +92,8 @@ test('账号、内容权限与持久化完整流程', async t => {
     assert.equal((await guest(`/articles/${articleId}`)).data.article.body, article.body);
   });
   await t.test('其他账号无法编辑、删除或冒用作者', async () => {
-    await bob('/auth/register', { method: 'POST', body: { ...account, name: '另一用户', email: 'bob@example.com' } });
+    await bob('/auth/send-code', { method: 'POST', body: { email: 'bob@example.com' } });
+    await bob('/auth/register', { method: 'POST', body: { ...account, name: '另一用户', email: 'bob@example.com', code: mail.messages.get('bob@example.com') } });
     assert.equal((await bob('/articles?mine=1')).data.articles.length, 0);
     assert.equal((await bob(`/articles/${articleId}`, { method: 'PATCH', body: article })).status, 403);
     assert.equal((await bob(`/articles/${articleId}`, { method: 'DELETE' })).status, 403);

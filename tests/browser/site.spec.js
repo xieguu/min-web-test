@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { fillRegistrationCode } from './fixtures.js';
 
 test('桌面：浏览、账号、发布编辑删除全流程', async ({ page }) => {
   const errors = [];
@@ -19,6 +20,7 @@ test('桌面：浏览、账号、发布编辑删除全流程', async ({ page }) 
   await page.getByRole('link', { name: '创建账号', exact: true }).click();
   await page.getByRole('textbox', { name: '昵称', exact: true }).fill('浏览器测试');
   await page.getByRole('textbox', { name: '邮箱', exact: true }).fill(email);
+  await fillRegistrationCode(page, email);
   await page.getByLabel('密码', { exact: true }).fill('Browser-test-2026');
   await page.getByRole('button', { name: '显示密码' }).click();
   await expect(page.getByLabel('密码', { exact: true })).toHaveAttribute('type', 'text');

@@ -2,16 +2,24 @@
 @email = practice@example.com
 @password = Practice-test-2026
 @cookie = COOKIE_VALUE
+@code = EMAIL_CODE
 
 # 注册账号默认为 LV1。文件、靶场接口需要管理员授予 LV2；重置练习数据需要 LV3。
 # 首个管理员设置命令见 README 的「设置首个管理员」。
+
+### 先发送注册验证码，到邮箱领取 6 位数字填入 code
+POST {{base}}/api/auth/send-code
+Content-Type: application/json
+X-Requested-With: min-web-test
+
+{"email":"{{email}}"}
 
 ### 注册（首次执行）；从 Set-Cookie 取 min.sid 的值填入 cookie
 POST {{base}}/api/auth/register
 Content-Type: application/json
 X-Requested-With: min-web-test
 
-{"name":"练习账号","email":"{{email}}","password":"{{password}}"}
+{"name":"练习账号","email":"{{email}}","password":"{{password}}","code":"{{code}}"}
 
 ### 登录已有账号
 POST {{base}}/api/auth/login

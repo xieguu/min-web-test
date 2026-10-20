@@ -11,6 +11,7 @@ Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=3000
 Environment=APP_DATA_DIR=/var/lib/min-web-test
+EnvironmentFile=-/etc/min-web-test.env
 ExecStart=/opt/min-web-test/runtime/bin/node /opt/min-web-test/app/server/index.js
 Restart=on-failure
 RestartSec=3
