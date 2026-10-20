@@ -35,6 +35,16 @@ ssh -N -L 127.0.0.1:3001:127.0.0.1:3000 -o ExitOnForwardFailure=yes -o ServerAli
 
 浏览器打开 http://127.0.0.1:3001/lab 。本机 3001 转发到服务器 3000，便于与本机原来运行的 3000 区分。
 
+新注册账号默认为 LV1，需要先设置首个管理员，再通过「账号管理」为其他账号授予 LV2。
+
+先通过网页注册自己的账号，将下面的 `YOUR_EMAIL` 换成注册邮箱，在服务器执行：
+
+```bash
+runuser -u minweb -- env APP_DATA_DIR=/var/lib/min-web-test /opt/min-web-test/runtime/bin/node /opt/min-web-test/app/server/admin.js YOUR_EMAIL
+```
+
+在网页重新登录后，该账号成为 LV3，可进入 `/admin` 管理等级和账号状态。升级到 1.2 后，原有账号也按 LV1 初始化，需要完成这一步。
+
 `ssh -D 1080` 是 SOCKS 代理；`-L` 才是这里的网站端口转发。二者可以在不同 SSH 连接中同时使用。本部署只需要现有 SSH 端口，应用监听服务器回环地址。
 
 ## 管理

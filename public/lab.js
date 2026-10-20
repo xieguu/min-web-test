@@ -1,4 +1,4 @@
-export async function renderLabPage(main, { api, escape, toast, isCurrent }) {
+export async function renderLabPage(main, { api, escape, toast, user, isCurrent }) {
   const params = new URLSearchParams(location.search);
   let mode = params.get('mode') || 'vulnerable';
   const config = await api(`/lab?mode=${encodeURIComponent(mode)}`);
@@ -15,6 +15,10 @@ export async function renderLabPage(main, { api, escape, toast, isCurrent }) {
     <section class="exercise-card exercise-wide">${heading('xss')}<div class="xss-columns"><div><form id="lab-message-form"><label class="field"><span>留言内容</span><textarea name="body" maxlength="2000" rows="5" placeholder="写入留言，观察右侧预览" required></textarea></label><button class="button secondary" type="submit">保存留言 →</button></form><details class="lab-hint"><summary>查看测试提示</summary><p>留言会存入数据库。下面的输入会在预览页插入一个可见标记，刷新后仍可观察。</p><code>&lt;script&gt;document.body.append('XSS 已执行')&lt;/script&gt;</code><p>预览页在独立沙箱中运行，用页面文字变化验证脚本执行。修复模式将原文显示为文本。</p></details>${output('message')}</div><div><div class="preview-heading"><h3>留言预览</h3><button class="button ghost small" id="reload-preview" type="button">刷新预览</button></div><iframe id="xss-preview" title="留言预览" sandbox="allow-scripts"></iframe><code class="preview-path">GET /api/lab/messages/preview</code></div></div></section></div>
     <section class="lab-events"><div class="section-title-row"><div><span class="eyebrow">REQUEST HISTORY</span><h2>最近的练习请求</h2></div><button class="button secondary small" id="refresh-events">刷新记录</button></div><p class="muted">显示当前登录账号最近 30 条记录；不记录密码、Cookie 或请求正文。</p><div class="table-scroll"><table><thead><tr><th>时间</th><th>方法 / 路径</th><th>身份</th><th>模式</th><th>状态</th></tr></thead><tbody id="lab-events-list"></tbody></table></div></section>
     <details class="lab-reset"><summary>重置练习数据</summary><p>恢复示例商品、笔记、初始留言，清空练习记录。账号、文章、评论和个人文件会保留。</p><form id="lab-reset-form"><label class="field"><span>输入 RESET 确认</span><input name="confirmation" placeholder="RESET" pattern="RESET" required autocomplete="off"></label><button class="button danger" type="submit">重置练习数据</button></form></details>`;
+  if (user.level < 3) {
+    main.querySelector('#lab-reset-form').hidden = true;
+    main.querySelector('.lab-reset > p').textContent = '共享练习数据由 LV3 管理员重置，请联系站点管理员。';
+  }
   const error = main.querySelector('#lab-error');
   const showError = problem => { if (error.isConnected) { error.textContent = problem.message; error.hidden = false; } };
   const updatePreview = () => {

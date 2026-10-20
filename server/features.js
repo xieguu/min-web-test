@@ -1,7 +1,7 @@
 import multer from 'multer';
 import { randomUUID } from 'node:crypto';
 
-export function mountFeatures(app, { db, requireUser, field, fail }) {
+export function mountFeatures(app, { db, requireUser, requireTester, field, fail }) {
   const commentSelect = `SELECT c.*, u.name AS author_name FROM comments c JOIN users u ON c.author_id = u.id`;
   const fileColumns = 'id, owner_id, name, mime, size, created_at';
   const articleExists = id => {
@@ -30,10 +30,10 @@ export function mountFeatures(app, { db, requireUser, field, fail }) {
     storage: multer.memoryStorage(), defParamCharset: 'utf8',
     limits: { fileSize: 2 * 1024 * 1024, files: 1, fields: 0, parts: 1 },
   }).single('file');
-  app.get('/api/files', requireUser, (req, res) => {
+  app.get('/api/files', requireTester, (req, res) => {
     res.json({ files: db.prepare(`SELECT ${fileColumns} FROM files WHERE owner_id = ? ORDER BY created_at DESC`).all(req.user.id), limits: { count: 20, bytes: 2 * 1024 * 1024 } });
   });
-  app.post('/api/files', requireUser, upload, (req, res) => {
+  app.post('/api/files', requireTester, upload, (req, res) => {
     if (!req.file) throw fail(400, '请选择一个文件，表单字段名为 file');
     if (db.prepare('SELECT count(*) AS count FROM files WHERE owner_id = ?').get(req.user.id).count >= 20) {
       throw fail(409, '最多保留 20 个文件，请先删除不需要的文件');
@@ -51,11 +51,11 @@ export function mountFeatures(app, { db, requireUser, field, fail }) {
     if (file.owner_id !== req.user.id) throw fail(403, '只能访问自己的文件');
     return file;
   };
-  app.get('/api/files/:id/download', requireUser, (req, res) => {
+  app.get('/api/files/:id/download', requireTester, (req, res) => {
     const file = ownedFile(req);
     res.attachment(file.name).type('application/octet-stream').send(Buffer.from(file.content));
   });
-  app.delete('/api/files/:id', requireUser, (req, res) => {
+  app.delete('/api/files/:id', requireTester, (req, res) => {
     ownedFile(req);
     db.prepare('DELETE FROM files WHERE id = ?').run(req.params.id);
     res.json({ ok: true });

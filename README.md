@@ -107,14 +107,57 @@ npm.cmd run dev
 3. 注册成功后自动登录。邮箱用作登录账号，当前不发送验证邮件。
 4. 点击「发布内容」，填写标题、分类和正文，摘要可以留空。保存后可以继续编辑或删除。
 5. 打开文章详情，在底部发表评论，测试输入与展示。
-6. 进入「我的文件」上传一个文件，再尝试下载、删除。
-7. 进入「自测靶场」，按照下面的步骤练习。
+6. 在「我的账号」查看自己的等级与权限，新账号默认为 LV1。
+7. 由管理员授予 LV2 后，可以进入「我的文件」上传、下载和删除文件，以及进入「自测靶场」练习。
 
 没有默认账号和密码。本地与服务器各自保存数据，首次访问另一套部署时需要重新注册。
+
+## 账号等级与权限
+
+| 功能 | 游客 | LV1 普通用户 | LV2 测试员 | LV3 管理员 |
+| --- | --- | --- | --- | --- |
+| 浏览公开文章和评论 | ✓ | ✓ | ✓ | ✓ |
+| 发布文章、发表评论、修改自己的资料 | — | ✓ | ✓ | ✓ |
+| 管理自己的文件 | — | — | ✓ | ✓ |
+| 进入靶场、切换练习身份和模式 | — | — | ✓ | ✓ |
+| 重置共享练习数据 | — | — | — | ✓ |
+| 管理其他账号的等级、禁用或启用账号 | — | — | — | ✓ |
+
+等级由后端在每次请求时检查。即使绕过页面菜单、修改前端代码或直接构造 HTTP 请求，等级不足也会返回 `403`。文章、评论和文件还会检查归属，等级提升不会自动取得其他人的内容修改权。
+
+注册时只校验邮箱格式和是否重复，当前**没有邮箱验证码**。所有新注册账号，以及从旧版本迁移的账号，默认都是 LV1；注册或修改个人资料不能自行更改等级。
+
+### 设置首个管理员
+
+先在网站注册你自己的账号，再由服务器维护者指定该账号为管理员。将下面的 `YOUR_EMAIL` 替换成刚才注册的邮箱。
+
+使用部署脚本安装的 Ubuntu 服务器，在服务器窗口执行：
+
+```bash
+runuser -u minweb -- env APP_DATA_DIR=/var/lib/min-web-test /opt/min-web-test/runtime/bin/node /opt/min-web-test/app/server/admin.js YOUR_EMAIL
+```
+
+本地 Windows 运行时，在项目目录中执行：
+
+```powershell
+npm.cmd run admin -- YOUR_EMAIL
+```
+
+看到「已设为 LV3 管理员」后，在网页重新登录。导航会出现「账号管理」，地址为 `/admin`。该维护命令只能提升已经注册的账号，不会创建默认账号或密码。
+
+### 管理其他账号
+
+1. 管理员进入「账号管理」，按昵称或邮箱搜索账号。
+2. 选择 LV1、LV2 或 LV3，点击该行「保存」。对方下一次请求即按新等级处理；刷新页面可看到最新权限。
+3. 将状态改为「禁用」后保存，该账号无法再次登录，原有会话失效。
+4. 改回「正常」后，对方需要重新登录，旧会话不会恢复。
+
+管理员不能在网页中禁用自己或降低自己的等级。维护者可以使用上面的服务器命令恢复一个已注册账号为可用的管理员。
 
 ## 功能
 
 - 账号：注册、登录、退出、修改昵称、保留登录状态。
+- 等级：LV1 普通用户、LV2 测试员、LV3 管理员；后台调整等级、禁用或启用账号。
 - 内容：首页列表、标题和正文搜索、分类筛选、详情页。
 - 管理：登录后发布内容，只能编辑或删除自己发布的内容。
 - 评论：文章下留言、删除自己的评论；文章删除时关联评论一并删除。
@@ -122,7 +165,7 @@ npm.cmd run dev
 - 靶场：SQL 注入、对象越权、存储型 XSS，支持漏洞 / 修复模式对照、练习身份切换、请求记录、数据重置。
 - 界面：中文、桌面与手机布局、错误提示、空列表、提交状态、删除确认。
 
-文章公开可读，正文按纯文本显示。账号邮箱为登录标识，当前版本不提供邮箱验证、找回密码、邮件发送或管理后台。
+文章公开可读，正文按纯文本显示。账号邮箱为登录标识，当前版本未提供邮箱验证、找回密码或邮件发送；账号管理后台需要 LV3。
 
 ## 技术与文件
 
@@ -132,6 +175,8 @@ npm.cmd run dev
 public/             页面、样式和浏览器交互
 server/app.js       账号与内容接口、会话、校验
 server/database.js  数据表与首次启动示例内容
+server/access.js    等级检查与账号管理接口
+server/admin.js     首个管理员设置与恢复命令
 server/features.js  评论与文件接口
 server/lab.js       三种漏洞练习与独立练习数据
 server/index.js     HTTP 服务入口
@@ -143,11 +188,11 @@ data/               运行时数据库、会话及随机会话密钥（不提交
 
 参考：[Express 会话文档](https://expressjs.com/en/resources/middleware/session/)、[session-file-store](https://github.com/valery-barysok/session-file-store)、[Node.js SQLite 文档](https://nodejs.org/api/sqlite.html)、[Multer 上传中间件](https://expressjs.com/en/resources/middleware/multer/)。
 
-`data/site.sqlite` 存账号、文章、评论和文件；文件原始字节直接保存在 SQLite BLOB 中。`data/lab.sqlite` 只存靶场示例商品、笔记、留言和请求记录。首次使用新版时，原有 v1 数据库会自动升级到 v2，保留已有账号和文章。
+`data/site.sqlite` 存账号、等级、文章、评论和文件；文件原始字节直接保存在 SQLite BLOB 中。`data/lab.sqlite` 只存靶场示例商品、笔记、留言和请求记录。首次使用新版时，原有数据库会自动升级到 v3，保留已有数据，并将已有账号设为 LV1。
 
 ## 开始练习
 
-注册并登录后点击导航中的「自测靶场」。本地入口为 http://127.0.0.1:3000/lab ，通过上述 SSH 转发访问服务器时使用 http://127.0.0.1:3001/lab 。默认进入漏洞模式，顶部可以切换到修复模式；页面提供表单、原始 JSON 响应和可展开提示。
+账号被授予 LV2 或 LV3 后，点击导航中的「自测靶场」。本地入口为 http://127.0.0.1:3000/lab ，通过上述 SSH 转发访问服务器时使用 http://127.0.0.1:3001/lab 。默认进入漏洞模式，顶部可以切换到修复模式；页面提供表单、原始 JSON 响应和可展开提示。
 
 | 场景 | 漏洞模式 | 修复模式 |
 | --- | --- | --- |
@@ -193,7 +238,7 @@ data/               运行时数据库、会话及随机会话密钥（不提交
 
 练习身份 Alice / Bob 与登录账号分开，选择保存在当前会话中；运行模式作为每次请求的 `mode` 参数传递。练习数据在该站点内共享，请求记录按登录账号显示。XSS 在独立的 iframe 沙箱中执行，使用 DOM 文字变化观察结果，无法访问父页面登录环境。
 
-页面底部输入 `RESET` 可以恢复练习数据。此操作只修改 `lab.sqlite`，不会清空账号、文章、评论或个人文件。具体步骤见 [靶场说明](docs/LAB.md)。
+LV3 管理员在页面底部输入 `RESET` 可以恢复练习数据，LV2 不能重置共享数据。此操作只修改 `lab.sqlite`，不会清空账号、文章、评论或个人文件。具体步骤见 [靶场说明](docs/LAB.md)。
 
 ### 使用 HTTP 客户端或代理
 
@@ -289,7 +334,9 @@ systemctl start min-web-test
 | PowerShell 无法执行 `npm.ps1` | 使用文中的 `npm.cmd` 命令。 |
 | 找不到 `node:sqlite` | 本地使用 Node.js 24 或更高版本；服务器使用安装脚本提供的运行时。 |
 | 登录返回 429 | 注册和登录共用每 IP 每 15 分钟 40 次限额，等待当前限流窗口结束。 |
-| 找不到默认账号或密码找回 | 点击「创建账号」注册；当前未提供密码找回、邮件发送或管理后台。 |
+| 注册后打不开文件或靶场 | 新账号默认为 LV1；由 LV3 管理员授予 LV2 后使用。自己的账号可由服务器维护命令设为管理员。 |
+| 升级后原账号也变成 LV1 | 新版迁移采用统一的低权限初始等级；按「设置首个管理员」配置自己的账号，再为其他账号分配等级。 |
+| 找不到默认账号或密码找回 | 点击「创建账号」注册；当前未提供密码找回或邮件发送。 |
 
 ## 配置
 
@@ -312,6 +359,8 @@ systemctl start min-web-test
 | POST | `/api/auth/login` | 登录：`email, password` |
 | POST | `/api/auth/logout` | 退出 |
 | PATCH | `/api/account` | 修改昵称：`name` |
+| GET | `/api/admin/users` | LV3：查看账号及等级定义 |
+| PATCH | `/api/admin/users/:id` | LV3：修改等级 `level`（整数 1–3）或状态 `disabled`（布尔值） |
 | GET | `/api/articles?q=&category=&mine=1` | 内容列表；查询参数均可选 |
 | GET | `/api/articles/:id` | 内容详情 |
 | POST | `/api/articles` | 发布：`title, body, category, summary`（摘要选填） |
@@ -319,17 +368,17 @@ systemctl start min-web-test
 | DELETE | `/api/articles/:id` | 删除自己的内容 |
 | GET / POST | `/api/articles/:id/comments` | 读取 / 发布评论；发布字段为 `body` |
 | DELETE | `/api/comments/:id` | 删除自己的评论 |
-| GET / POST | `/api/files` | 列出 / 上传个人文件；上传字段为 `file` |
+| GET / POST | `/api/files` | LV2 起：列出 / 上传个人文件；上传字段为 `file` |
 | GET | `/api/files/:id/download` | 下载自己的文件 |
 | DELETE | `/api/files/:id` | 删除自己的文件 |
-| GET | `/api/lab` | 场景信息与当前练习身份 |
+| GET | `/api/lab` | LV2 起：场景信息与当前练习身份；其余练习接口同样需要 LV2 |
 | POST | `/api/lab/actor` | 切换练习身份：`actor` 为 `alice` / `bob` |
 | GET | `/api/lab/search?mode=vulnerable&q=` | 商品搜索，`mode` 可改为 `fixed` |
 | GET | `/api/lab/notes/:id?mode=vulnerable` | 读取练习笔记 |
 | GET / POST | `/api/lab/messages` | 查看 / 保存练习留言；发布字段为 `body` |
 | GET | `/api/lab/messages/preview?mode=vulnerable` | HTML 留言预览 |
 | GET | `/api/lab/events` | 当前账号最近 30 条练习请求；全站保留最近 500 条 |
-| POST | `/api/lab/reset` | 重置练习数据：`confirmation` 必须为 `RESET` |
+| POST | `/api/lab/reset` | LV3：重置练习数据，`confirmation` 必须为 `RESET` |
 
 JSON 写入请求使用 `Content-Type: application/json` 和 `X-Requested-With: min-web-test`；上传改用 `multipart/form-data`，保留同一自定义请求头。登录后携带服务端返回的 `min.sid` Cookie。注册和登录共用每 IP 每 15 分钟 40 次的限流。
 
@@ -341,6 +390,6 @@ npm test
 npm run test:ui
 ```
 
-接口测试使用独立临时数据库，覆盖输入校验、密码哈希、会话、权限隔离、评论级联、二进制文件、三类漏洞对照、重置边界、重启持久化与 v1 数据库升级。测试不会操作 `data/` 中的实际数据。
+接口测试使用独立临时数据库，覆盖输入校验、密码哈希、会话、三级权限、禁止自提权、禁用与重新启用时的会话失效、评论级联、二进制文件、三类漏洞对照、重置边界、重启持久化与数据库升级。测试不会操作 `data/` 中的实际数据。
 
 浏览器测试使用本机 Microsoft Edge，在独立端口 `3107` 和 `test-results/` 数据目录中运行，覆盖桌面使用流程、三类漏洞的实际页面效果和手机布局。截图保存在 `test-results/`，包括 `lab-desktop.png` 和 `lab-mobile.png`。其他系统可将 `playwright.config.js` 的 `channel` 改为已安装的浏览器，或安装 Playwright Chromium 后移除该配置。

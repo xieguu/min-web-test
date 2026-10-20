@@ -3,6 +3,9 @@
 @password = Practice-test-2026
 @cookie = COOKIE_VALUE
 
+# 注册账号默认为 LV1。文件、靶场接口需要管理员授予 LV2；重置练习数据需要 LV3。
+# 首个管理员设置命令见 README 的「设置首个管理员」。
+
 ### 注册（首次执行）；从 Set-Cookie 取 min.sid 的值填入 cookie
 POST {{base}}/api/auth/register
 Content-Type: application/json
@@ -101,3 +104,15 @@ X-Requested-With: min-web-test
 Cookie: min.sid={{cookie}}
 
 {"confirmation":"RESET"}
+
+### 管理员查看账号（需要 LV3）
+GET {{base}}/api/admin/users
+Cookie: min.sid={{cookie}}
+
+### 管理员设置账号等级（将 USER_ID 替换为目标账号 id；需要 LV3）
+PATCH {{base}}/api/admin/users/USER_ID
+Content-Type: application/json
+X-Requested-With: min-web-test
+Cookie: min.sid={{cookie}}
+
+{"level":2,"disabled":false}

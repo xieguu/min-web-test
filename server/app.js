@@ -12,11 +12,12 @@ import { openDatabase } from './database.js';
 import { mountFeatures } from './features.js';
 import { createLab } from './lab.js';
 import multer from 'multer';
+import { createAccess, mountAdmin, USER_COLUMNS, LEVELS } from './access.js';
 
 const FileStore = createFileStore(session);
 const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
 export const categories = ['入门指南', '使用说明', '更新记录', '随手记录'];
-const userColumns = 'id, name, email, created_at';
+const userColumns = USER_COLUMNS;
 const articleQuery = `SELECT a.*, COALESCE(u.name, 'MIN 编辑部') AS author_name
   FROM articles a LEFT JOIN users u ON a.author_id = u.id`;
 
@@ -75,18 +76,22 @@ export function createApp({ dataDir, sessionSecret, secureCookie = false } = {})
     cookie: { httpOnly: true, sameSite: 'lax', secure: secureCookie, maxAge: 7 * 86400000 },
   }));
   app.use('/api', (req, _res, next) => {
-    req.user = req.session.userId ? db.prepare(`SELECT ${userColumns} FROM users WHERE id = ?`).get(req.session.userId) : null;
+    const user = req.session.userId ? db.prepare(`SELECT ${userColumns}, session_version FROM users WHERE id = ?`).get(req.session.userId) : null;
+    const valid = user && !user.disabled && user.session_version === (req.session.userVersion ?? 0);
+    req.user = valid ? Object.fromEntries(Object.entries(user).filter(([key]) => key !== 'session_version')) : null;
+    if (req.session.userId && !valid) { delete req.session.userId; delete req.session.userVersion; }
     next();
   });
   const authLimit = rateLimit({
     windowMs: 15 * 60000, limit: 40, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: '操作过于频繁，请在 15 分钟后重试' },
   });
-  const requireUser = (req, _res, next) => next(req.user ? undefined : fail(401, '请先登录'));
+  const { requireUser, requireTester, requireAdmin } = createAccess(fail);
   const establishSession = (req, userId) => new Promise((resolve, reject) => {
     req.session.regenerate(error => {
       if (error) return reject(error);
       req.session.userId = userId;
+      req.session.userVersion = db.prepare('SELECT session_version FROM users WHERE id = ?').get(userId).session_version;
       req.session.save(error => error ? reject(error) : resolve());
     });
   });
@@ -97,14 +102,14 @@ export function createApp({ dataDir, sessionSecret, secureCookie = false } = {})
     return article;
   };
 
-  app.get('/api/session', (req, res) => res.json({ user: req.user || null }));
+  app.get('/api/session', (req, res) => res.json({ user: req.user || null, levels: LEVELS }));
   app.post('/api/auth/register', authLimit, async (req, res) => {
     const name = field(req.body?.name, '昵称', 2, 24);
     const email = emailField(req.body?.email);
     const password = passwordField(req.body?.password);
     const hash = await bcrypt.hash(password, 12);
     const id = randomUUID();
-    const result = db.prepare('INSERT INTO users VALUES (?, ?, ?, ?, ?) ON CONFLICT(email) DO NOTHING')
+    const result = db.prepare('INSERT INTO users (id, name, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(email) DO NOTHING')
       .run(id, name, email, hash, new Date().toISOString());
     if (!result.changes) throw fail(409, '这个邮箱已经注册，请直接登录');
     await establishSession(req, id);
@@ -115,6 +120,7 @@ export function createApp({ dataDir, sessionSecret, secureCookie = false } = {})
     const password = passwordField(req.body?.password);
     const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
     if (!user || !await bcrypt.compare(password, user.password_hash)) throw fail(401, '邮箱或密码不正确');
+    if (user.disabled) throw fail(403, '账号已被禁用，请联系管理员');
     await establishSession(req, user.id);
     res.json({ user: db.prepare(`SELECT ${userColumns} FROM users WHERE id = ?`).get(user.id) });
   });
@@ -168,12 +174,13 @@ export function createApp({ dataDir, sessionSecret, secureCookie = false } = {})
     db.prepare('DELETE FROM articles WHERE id = ?').run(req.params.id);
     res.json({ ok: true });
   });
-  mountFeatures(app, { db, requireUser, field, fail });
-  const lab = createLab({ dataDir, requireUser, field, fail });
+  mountFeatures(app, { db, requireUser, requireTester, field, fail });
+  mountAdmin(app, { db, requireAdmin, fail });
+  const lab = createLab({ dataDir, requireUser: requireTester, requireAdmin, field, fail });
   app.use('/api/lab', lab.router);
   app.use('/api', (_req, _res, next) => next(fail(404, '接口不存在')));
   app.use(express.static(publicDir));
-  app.get(['/', '/login', '/register', '/account', '/write', '/files', '/lab', '/articles/:id', '/articles/:id/edit'], (_req, res) => {
+  app.get(['/', '/login', '/register', '/account', '/write', '/files', '/lab', '/admin', '/articles/:id', '/articles/:id/edit'], (_req, res) => {
     res.sendFile(join(publicDir, 'index.html'));
   });
   app.use((_req, res) => res.status(404).sendFile(join(publicDir, '404.html')));

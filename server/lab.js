@@ -9,7 +9,7 @@ const exercises = [
   { id: 'xss', name: '留言预览', kind: '存储型 XSS', method: 'POST', path: '/api/lab/messages', goal: '保存一条留言，让预览页面执行代码并改变页面文字。', fixed: '对留言做 HTML 转义，再插入页面。' },
 ];
 
-export function createLab({ dataDir, requireUser, field, fail }) {
+export function createLab({ dataDir, requireUser, requireAdmin, field, fail }) {
   // Intentionally vulnerable branches below operate on fixtures in a separate database.
   const db = new DatabaseSync(join(dataDir, 'lab.sqlite'));
   db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
@@ -102,7 +102,7 @@ export function createLab({ dataDir, requireUser, field, fail }) {
     res.type('html').send(`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>留言练习预览</title><style>body{font:14px/1.8 system-ui,sans-serif;color:#343e48;padding:14px;margin:0}article{padding:12px;border-bottom:1px solid #e6e8ed;overflow-wrap:anywhere}small{color:#88919c}p{white-space:pre-wrap;margin:8px 0}</style><body><h3>留言板 · ${req.labMode === 'fixed' ? '修复模式' : '漏洞模式'}</h3>${messages.map(message => `<article><small>${htmlEscape(message.author)}</small><p>${req.labMode === 'fixed' ? htmlEscape(message.body) : message.body}</p></article>`).join('')}</body></html>`);
   });
   router.get('/events', (req, res) => res.json({ events: db.prepare('SELECT actor, mode, method, path, status, created_at FROM events WHERE user_id = ? ORDER BY id DESC LIMIT 30').all(req.user.id) }));
-  router.post('/reset', (req, res) => {
+  router.post('/reset', requireAdmin, (req, res) => {
     if (req.body?.confirmation !== 'RESET') throw fail(400, '请输入 RESET 确认重置练习数据');
     seed();
     req.session.labActor = 'alice';

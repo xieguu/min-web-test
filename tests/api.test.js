@@ -63,6 +63,8 @@ test('账号、内容权限与持久化完整流程', async t => {
     const result = await alice('/auth/register', { method: 'POST', body: account });
     assert.equal(result.status, 201);
     assert.equal(result.data.user.email, account.email);
+    assert.equal(result.data.user.level, 1);
+    assert.equal(result.data.user.disabled, 0);
     assert.equal(result.data.user.password_hash, undefined);
     assert.match(result.headers.get('set-cookie'), /HttpOnly/);
     assert.match(result.headers.get('set-cookie'), /SameSite=Lax/);

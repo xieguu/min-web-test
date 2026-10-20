@@ -41,6 +41,7 @@ test('评论、文件与隔离靶场', async t => {
   const upload = (bytes, filename = '测试文件.txt') => { const data = new FormData(); data.append('file', new Blob([bytes]), filename); return data; };
   await register(alice, 'alice@example.com');
   await register(bob, 'bob@example.com');
+  runtime.db.prepare('UPDATE users SET level = 2').run();
   let commentId, fileId;
   const fileBytes = Buffer.from([0, 1, 2, 127, 128, 255]);
   const xss = "<script>document.body.append('XSS 已执行')</script>";
@@ -131,6 +132,8 @@ test('评论、文件与隔离靶场', async t => {
     assert.equal((await bob('/lab/events')).data.events.length, 0);
   });
   await t.test('重置仅作用于练习数据，业务数据完整保留', async () => {
+    assert.equal((await alice('/lab/reset', { method: 'POST', body: { confirmation: 'RESET' } })).status, 403);
+    runtime.db.prepare('UPDATE users SET level = 3 WHERE email = ?').run('alice@example.com');
     assert.equal((await alice('/lab/reset', { method: 'POST', body: {} })).status, 400);
     assert.equal((await alice('/lab/reset', { method: 'POST', body: { confirmation: 'RESET' } })).status, 200);
     assert.equal((await alice('/lab/messages')).data.messages.length, 1);
@@ -145,7 +148,7 @@ test('评论、文件与隔离靶场', async t => {
   });
 });
 
-test('v1 数据库升级为 v2 时保留已有账号和文章', () => {
+test('v1 数据库升级为 v3 时保留已有账号和文章，已有账号默认 LV1', () => {
   const root = resolve(tmpdir()), dataDir = mkdtempSync(join(root, 'min-web-migrate-'));
   const original = new DatabaseSync(join(dataDir, 'site.sqlite'));
   original.exec(`
@@ -158,7 +161,8 @@ test('v1 数据库升级为 v2 时保留已有账号和文章', () => {
   original.close();
   const runtime = createApp({ dataDir });
   try {
-    assert.equal(runtime.db.prepare('PRAGMA user_version').get().user_version, 2);
+    assert.equal(runtime.db.prepare('PRAGMA user_version').get().user_version, 3);
+    assert.deepEqual({ ...runtime.db.prepare('SELECT level, disabled, session_version FROM users').get() }, { level: 1, disabled: 0, session_version: 0 });
     assert.equal(runtime.db.prepare('SELECT name FROM users').get().name, '原账号');
     assert.equal(runtime.db.prepare('SELECT body FROM articles').get().body, '原正文');
     assert.equal(runtime.db.prepare('SELECT count(*) AS n FROM comments').get().n, 0);

@@ -64,7 +64,7 @@ export function openDatabase(dataDir) {
       db.close();
       throw error;
     }
-  } else if (version > 2) {
+  } else if (version > 3) {
     db.close();
     throw new Error(`不支持的数据库版本：${version}`);
   }
@@ -91,6 +91,22 @@ export function openDatabase(dataDir) {
         );
         CREATE INDEX files_owner ON files(owner_id);
         PRAGMA user_version = 2;
+        COMMIT;
+      `);
+    } catch (error) {
+      db.exec('ROLLBACK;');
+      db.close();
+      throw error;
+    }
+  }
+  if (version < 3) {
+    try {
+      db.exec(`
+        BEGIN;
+        ALTER TABLE users ADD COLUMN level INTEGER NOT NULL DEFAULT 1 CHECK (level BETWEEN 1 AND 3);
+        ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0 CHECK (disabled IN (0, 1));
+        ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0;
+        PRAGMA user_version = 3;
         COMMIT;
       `);
     } catch (error) {

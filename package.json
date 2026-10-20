@@ -1,6 +1,6 @@
 {
   "name": "min-web-test",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "description": "自用 Web 测试靶场：账号、内容、评论、文件与可切换的漏洞练习",
@@ -10,9 +10,10 @@
   "scripts": {
     "dev": "node --watch server/index.js",
     "start": "node server/index.js",
+    "admin": "node server/admin.js",
     "test": "node --test tests/*.test.js",
     "test:ui": "playwright test",
-    "check": "node --check server/app.js && node --check server/database.js && node --check server/features.js && node --check server/lab.js && node --check public/app.js && node --check public/features.js && node --check public/lab.js"
+    "check": "node --check server/app.js && node --check server/database.js && node --check server/access.js && node --check server/admin.js && node --check server/features.js && node --check server/lab.js && node --check public/app.js && node --check public/admin.js && node --check public/features.js && node --check public/lab.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

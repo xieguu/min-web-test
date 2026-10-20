@@ -1,8 +1,9 @@
 import { mountComments, renderFilesPage } from './features.js';
 import { renderLabPage } from './lab.js';
+import { levelBadge, accountPermissions, accessPage, renderAdminPage } from './admin.js';
 
 const main = document.querySelector('#main');
-const state = { user: null, categories: ['入门指南', '使用说明', '更新记录', '随手记录'] };
+const state = { user: null, levels: [], categories: ['入门指南', '使用说明', '更新记录', '随手记录'] };
 let routeVersion = 0, searchVersion = 0, searchTimer, toastTimer, deleteId;
 const icons = {
   plus: '<path d="M12 5v14M5 12h14"/>',
@@ -43,6 +44,7 @@ function toast(message) {
 }
 function renderHeader() {
   document.querySelector('#nav').innerHTML = `<a href="/" class="${location.pathname === '/' && !location.search.includes('mine=1') ? 'active' : ''}">内容首页</a>${state.user ? `<a href="/?mine=1" class="${location.pathname === '/' && location.search.includes('mine=1') ? 'active' : ''}">我的内容</a>` : ''}<a href="/files" class="${location.pathname === '/files' ? 'active' : ''}">我的文件</a><a href="/lab" class="${location.pathname === '/lab' ? 'active' : ''}">自测靶场</a>`;
+  if (state.user?.level === 3) document.querySelector('#nav').insertAdjacentHTML('beforeend', `<a href="/admin" class="${location.pathname === '/admin' ? 'active' : ''}">账号管理</a>`);
   document.querySelector('#header-actions').innerHTML = state.user
     ? `<a class="account-link" href="/account">${avatar(state.user.name)}<span class="account-name">${escape(state.user.name)}</span><span class="text-link">我的账号</span></a>`
     : '<a class="text-link" href="/login">登录</a><a class="button small" href="/register">创建账号</a>';
@@ -54,7 +56,7 @@ function navigate(path, replace = false) {
 }
 function safeNext() {
   const next = new URLSearchParams(location.search).get('next');
-  return next && /^\/(?:write|account|files|lab|articles\/[a-zA-Z0-9-]+(?:\/edit)?)$/.test(next) ? next : '/';
+  return next && /^\/(?:write|account|files|lab|admin|articles\/[a-zA-Z0-9-]+(?:\/edit)?)$/.test(next) ? next : '/';
 }
 function emptyState(title, description, action = '') {
   return `<div class="empty-state">${icon('document')}<h3>${title}</h3><p>${description}</p>${action}</div>`;
@@ -70,7 +72,7 @@ function sidebar() {
   return `<aside class="sidebar"><section class="side-card welcome"><span class="side-glyph">${icon('document')}</span>
     <h2>${state.user ? '留下一点新想法。' : '欢迎来到 MIN。'}</h2><p>${state.user ? '一段记录，一个灵感。<br>让值得留下的想法，有个地方。' : '一个简单、轻量的测试空间。<br>浏览内容，也可以留下你的想法。'}</p>
     <a class="button secondary" href="${state.user ? '/write' : '/register'}">${state.user ? '写一篇内容' : '创建你的账号'} ${icon('arrow')}</a></section>
-    <section class="side-card"><h2>自用测试靶场</h2><p>从账号、评论、文件开始，练习输入处理和权限测试。切换漏洞与修复模式，观察同一请求的差异。</p><a class="button secondary" href="/lab">进入自测靶场 ${icon('arrow')}</a><div class="mini-divider"></div><div class="about-line"><span>练习</span><span>SQLi / XSS / 越权</span></div><div class="about-line"><span>数据</span><span>可单独重置</span></div><div class="about-line"><span>版本</span><span><i class="live-dot"></i>1.1.0</span></div></section>
+    <section class="side-card"><h2>自用测试靶场</h2><p>从账号、评论、文件开始，练习输入处理和权限测试。切换漏洞与修复模式，观察同一请求的差异。</p><a class="button secondary" href="/lab">进入自测靶场 ${icon('arrow')}</a><div class="mini-divider"></div><div class="about-line"><span>访问等级</span><span>LV2 测试员起</span></div><div class="about-line"><span>练习</span><span>SQLi / XSS / 越权</span></div><div class="about-line"><span>版本</span><span><i class="live-dot"></i>1.2.0</span></div></section>
     <div class="side-note">${icon('info')}<span>这里的内容公开可见。<br>登录后可以发布和管理自己的内容。</span></div></aside>`;
 }
 async function loadArticles() {
@@ -127,6 +129,7 @@ function authPage(register) {
     <label class="field"><span>邮箱</span><input type="email" name="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required></label>
     <div class="field"><label for="password">密码</label><div class="password-wrap"><input type="password" id="password" name="password" autocomplete="${register ? 'new-password' : 'current-password'}" minlength="8" maxlength="64" placeholder="${register ? '设置至少 8 位密码' : '输入你的密码'}" required><button type="button" class="password-toggle" data-action="toggle-password" aria-label="显示密码" aria-pressed="false">显示</button></div>${register ? '<small>8–64 个字符，最多 72 字节</small>' : ''}</div>
     <button type="submit" class="button full-width">${register ? '创建账号' : '登录'} ${icon('arrow')}</button><p class="form-footer">${register ? '已经有账号？' : '第一次来这里？'}<a href="${register ? '/login' : '/register'}${suffix}">${register ? '去登录' : '创建账号'}</a></p></form><p class="auth-note">少一点复杂，多一点专注。</p></div></div>`;
+  if (register) document.querySelector('#auth-form .form-intro').textContent = '注册后为 LV1 普通用户，更高等级由管理员授予。';
 }
 async function articlePage(id, version) {
   const { article } = await api(`/articles/${encodeURIComponent(id)}`);
@@ -157,6 +160,8 @@ async function accountPage(version) {
   const user = state.user;
   document.title = '我的账号 · MIN';
   main.innerHTML = `<div class="page-header"><span class="eyebrow">YOUR LITTLE SPACE</span><h1>我的账号</h1><p>管理个人资料，找到你留下的每一篇内容。</p></div><div class="account-grid"><section class="form-card profile-card">${avatar(user.name, 'profile-avatar')}<h2>${escape(user.name)}</h2><p class="profile-email">${escape(user.email)}</p><div class="mini-divider"></div><form id="profile-form">${errorBox()}<label class="field"><span>昵称</span><input name="name" autocomplete="nickname" minlength="2" maxlength="24" value="${escape(user.name)}" required></label><label class="field"><span>邮箱</span><input type="email" value="${escape(user.email)}" disabled><small>邮箱作为登录账号，不支持修改。</small></label><button class="button secondary full-width" type="submit">保存资料</button></form><p class="account-created">加入于 ${date(user.created_at)}</p><button class="button ghost logout-button" data-action="logout">退出登录</button><p id="logout-error" class="form-error" role="alert" hidden></p></section><section class="account-content"><div class="content-toolbar"><h2 class="section-heading">我的内容 <span class="count">${articles.length}</span></h2><a href="/write" class="button small">${icon('plus')}发布内容</a></div>${articles.length ? articleCards(articles) : emptyState('还没有发布内容', '给这个小小的空间，留下你的第一篇记录。', '<a class="button secondary" href="/write">开始记录 →</a>')}</section></div>`;
+  main.querySelector('.account-grid').insertAdjacentHTML('beforebegin', accountPermissions(user, state.levels, escape));
+  main.querySelector('.profile-email').insertAdjacentHTML('afterend', levelBadge(user.level, state.levels, escape));
 }
 async function renderRoute() {
   const version = ++routeVersion;
@@ -164,17 +169,25 @@ async function renderRoute() {
   renderHeader();
   const path = location.pathname;
   const mine = new URLSearchParams(location.search).get('mine') === '1';
-  const needsAuth = ['/account', '/write', '/files', '/lab'].includes(path) || /^\/articles\/[^/]+\/edit$/.test(path) || (path === '/' && mine);
-  if (needsAuth && !state.user) return navigate(`/login?next=${encodeURIComponent(path === '/' ? '/account' : path)}`, true);
-  if (state.user && (path === '/login' || path === '/register')) return navigate('/account', true);
+  const needsAuth = ['/account', '/write', '/files', '/lab', '/admin'].includes(path) || /^\/articles\/[^/]+\/edit$/.test(path) || (path === '/' && mine);
   main.innerHTML = '<div class="loading" role="status">正在加载…</div>';
   try {
+    if (state.user && needsAuth) {
+      const session = await api('/session');
+      if (version !== routeVersion) return;
+      state.user = session.user; state.levels = session.levels; renderHeader();
+    }
+    if (needsAuth && !state.user) return navigate(`/login?next=${encodeURIComponent(path === '/' ? '/account' : path)}`, true);
+    if (state.user && (path === '/login' || path === '/register')) return navigate('/account', true);
+    const required = path === '/admin' ? 3 : ['/files', '/lab'].includes(path) ? 2 : 0;
+    if (required && state.user.level < required) return accessPage(main, { user: state.user, required, levels: state.levels, escape });
     if (path === '/') await homePage();
     else if (path === '/login' || path === '/register') authPage(path === '/register');
     else if (path === '/account') await accountPage(version);
     else if (path === '/write') await editorPage(null, version);
     else if (path === '/files') await renderFilesPage(main, { api, escape, date, toast, isCurrent: () => version === routeVersion });
-    else if (path === '/lab') await renderLabPage(main, { api, escape, toast, isCurrent: () => version === routeVersion });
+    else if (path === '/lab') await renderLabPage(main, { api, escape, toast, user: state.user, isCurrent: () => version === routeVersion });
+    else if (path === '/admin') await renderAdminPage(main, { api, escape, date, toast, user: state.user, isCurrent: () => version === routeVersion });
     else {
       const match = path.match(/^\/articles\/([^/]+)(\/edit)?$/);
       if (!match) throw new Error('这个页面不存在');
@@ -275,8 +288,9 @@ document.querySelector('#confirm-delete').addEventListener('click', async event 
 });
 window.addEventListener('popstate', renderRoute);
 try {
-  const { user } = await api('/session');
+  const { user, levels } = await api('/session');
   state.user = user;
+  state.levels = levels;
   await renderRoute();
 } catch (error) {
   renderHeader();

@@ -1,14 +1,20 @@
 import { test, expect } from '@playwright/test';
+import { setTestUserLevel } from './fixtures.js';
 
-test('评论、文件与三种漏洞的浏览器对照测试', async ({ page }) => {
+test('评论、文件与三种漏洞的浏览器对照测试', async ({ page, playwright }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/register');
   await page.getByLabel('昵称', { exact: true }).fill('靶场测试');
-  await page.getByLabel('邮箱', { exact: true }).fill(`lab-${Date.now()}@example.com`);
+  const email = `lab-${Date.now()}@example.com`;
+  await page.getByLabel('邮箱', { exact: true }).fill(email);
   await page.getByLabel('密码', { exact: true }).fill('Practice-browser-2026');
   await page.getByRole('button', { name: '创建账号', exact: true }).click();
   await expect(page.getByRole('link', { name: '我的内容', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: '自测靶场', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '需要 LV2 测试员权限' })).toBeVisible();
+  expect((await page.request.get('/api/lab')).status()).toBe(403);
+  await setTestUserLevel(playwright, email, 3);
 
   await page.goto('/articles/welcome');
   await page.getByLabel('写下评论').fill('<b>评论按文本显示</b>');
